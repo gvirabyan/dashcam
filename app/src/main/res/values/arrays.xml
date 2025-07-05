@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <integer-array name="video_framerate_options">
+        <item>24</item>
+        <item>30</item>
+        <item>60</item>
+        <item>90</item>
+        <item>120</item>
+    </integer-array>
+
+    <string-array name="languages_array">
+        <item>English (English) 🇬🇧</item> <!-- British flag -->
+        <item>Chinese (中文) 🇨🇳</item> <!-- Chinese flag -->
+        <item>Arabic (العربية) 🇸🇦</item> <!-- Saudi Arabian flag -->
+        <item>French (Français) 🇲🇫</item> <!-- French flag -->
+        <item>Turkish (Türkiye) 🇹🇷</item> <!-- Turkish flag -->
+        <item>Pashto (پښتو) 🏳️</item> <!-- White flag -->
+        <item>Indonesian (Bahasa) 🇮🇩</item> <!-- Indonesian flag -->
+        <item>Italian (Italiano) 🇮🇹</item> <!-- Italian flag -->
+    </string-array>
+
+
+    <string-array name="watermark_options">
+        <item>@string/array_watermark_time_fadcam</item>
+        <item>@string/array_watermark_timeonly</item>
+        <item>@string/array_watermark_nomark</item>
+    </string-array>
+
+    <string-array name="watermark_values">
+        <item>timestamp_fadcam</item>
+        <item>timestamp</item>
+        <item>no_watermark</item>
+    </string-array>
+</resources>

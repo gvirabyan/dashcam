@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="gray">#1f1e23</color>
+    <color name="gray500">#9E9E9E</color>
+    <color name="redPastel">#E43C3C</color>
+    <color name="greenPastel">#77DD77</color>
+    <color name="colorPrimary">#cfbafd</color>
+    <color name="material_on_surface_stroke">#cfbafd</color>
+    <color name="material_on_surface_emphasis_medium">@color/white</color>
+    <color name="torch_off">#757575</color>
+    <color name="torch_on">#FFB300</color>
+    <color name="button_start">#4CAF50</color>
+    <color name="button_stop">#FF0000</color>
+    <color name="button_pause">#FFA500</color>
+    <color name="button_record">#00FF00</color>
+    <color name="danger_red">#D32F2F</color>
+    <color name="danger_red_light">#F44336</color>
+    <color name="colorError">#D32F2F</color>
+    <color name="colorErrorDisabled">#884444</color> <!-- Muted red for disabled error state -->
+    <color name="green">#4CAF50</color>
+
+    <!-- Added for Trash Item Remaining Time Display -->
+    <color name="colorWarning">#FFA726</color> <!-- Orange A400 -->
+    <color name="gray_text_light">#BDBDBD</color> <!-- Grey 400 -->
+    <color name="gray_text_very_light">#E0E0E0</color> <!-- Grey 300 -->
+
+    <color name="gold">#FFD700</color>
+
+    <!-- Fix Start: Add color references for new theme attributes for maintainability -->
+    <color name="colorTopBar">@color/colorPrimary</color>
+    <color name="colorBottomNav">@color/colorPrimary</color>
+    <color name="colorHeading">@color/colorPrimary</color>
+    <color name="colorButton">@color/colorPrimary</color>
+    <color name="colorToggle">@color/greenPastel</color>
+    <color name="colorDialog">@color/gray</color>
+    <color name="colorStatusBar">@color/gray</color>
+    <!-- Fix End: Add color references for new theme attributes for maintainability -->
+
+    <color name="dark_red_card">#3B1818</color> <!-- Very dark, muted red for storage card -->
+    <color name="dark_purple_bar">#231942</color> <!-- Very dark purple for dark mode top bar and navbar -->
+
+    <color name="gray_button_filled">#232323</color> <!-- Much darker gray for filled button in all themes -->
+    
+    <!-- Darker color for storage card across all themes -->
+    <color name="dark_card_background">#171717</color>
+    
+    <!-- Extra dark color for storage card in Crimson theme -->
+    <color name="crimson_dark_card_background">#1E0E0E</color>
+
+    <color name="midnight_dusk_bg">#111113</color>
+</resources>
