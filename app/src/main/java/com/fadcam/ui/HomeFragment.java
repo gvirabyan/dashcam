@@ -2062,6 +2062,8 @@ public class HomeFragment extends BaseFragment {
     // Method to update the clock and dates
 
     private void updateStorageInfo() {
+        Log.e(TAG,"========================================================     -=================");
+
         Log.d(TAG, "updateStorageInfo: Updating storage information");
         StatFs stat = new StatFs(Environment.getExternalStorageDirectory().getPath());
         long bytesAvailable = stat.getAvailableBytes();
@@ -2108,6 +2110,7 @@ public class HomeFragment extends BaseFragment {
         bytesAvailable -= estimatedBytesUsed;
         // Ensure we never show negative available space
         bytesAvailable = Math.max(0, bytesAvailable);
+        Log.e(TAG,bytesAvailable+"     -=================");
         gbAvailable = Math.max(0, bytesAvailable / (1024.0 * 1024.0 * 1024.0));
 
         // Calculate remaining recording time based on available space and bitrate

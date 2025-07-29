@@ -14,6 +14,7 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.media.MediaCodec;
 import android.media.MediaRecorder;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
@@ -196,22 +197,31 @@ public class RecordingService extends Service {
 
     // ----- Fix Start for this class (RecordingService_isCameraOpen_field)-----
     private long recordingStartTime1 = 0;
-    private static final long MAX_SEGMENT_DURATION_MS = 5 * 1000; // Например, 0 секунд
+    private static final int MAX_SEGMENT_DURATION_MS = 500000 * 1000; // Например, 0 секунд
 
     private Handler durationHandler = new Handler(Looper.getMainLooper());
     private Runnable durationRunnable = new Runnable() {
         @Override
         public void run() {
             long elapsedMs = SystemClock.elapsedRealtime() - recordingStartTime1;
-            Log.e(TAG, elapsedMs+"  " + recordingStartTime1);
+            Log.e(TAG, elapsedMs+"  " + recordingStartTime1 +"  " +recordingStartTime);
+            Log.e(TAG,getEstimatedFileSizeInBytes(20)+"  file sizeeeee");
 
-            if (elapsedMs >= MAX_SEGMENT_DURATION_MS) {
+            if (elapsedMs >= MAX_SEGMENT_DURATION_MS && elapsedMs >= MAX_SEGMENT_DURATION_MS+700) {
                 Log.d(TAG, "Макс. длительность сегмента достигнута. Подготовка нового файла.");
 
-                rolloverToNextSegment();
-                recordingStartTime1 = SystemClock.elapsedRealtime(); // Сбросить время старта
+                try {
+                    rolloverToNextSegment();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
             }
-            durationHandler.postDelayed(this, 500); // Проверять каждые 0.5 сек
+            if (elapsedMs >= MAX_SEGMENT_DURATION_MS+1000) {
+                foo803();
+                recordingStartTime1 = SystemClock.elapsedRealtime(); // Сбросить время старта
+
+            }
+            durationHandler.postDelayed(this, 1000); // Проверять каждые 0.5 сек
         }
     };
 
@@ -276,54 +286,84 @@ public class RecordingService extends Service {
 
     private boolean recordingInProgress = false;
 
-    private void rolloverToNextSegment() {
-        Log.d(TAG, "rolloverToNextSegment() вызван. recordingInProgress=" + recordingInProgress + ", pending=" + nextOutputFilePending);
-
-        Log.d(TAG, "rolloverToNextSegment() called — recordingInProgress=" + recordingInProgress + ", nextOutputFilePending=" + nextOutputFilePending);
-
-        if (!recordingInProgress) {
-            Log.w(TAG, "Запись не идёт — нельзя вызвать rollover.");
-            return;
-        }
-
-        if (nextOutputFilePending) {
-            Log.w(TAG, "Следующий файл уже установлен, ждём переключения.");
-            return;
-        }
-
-        try {
+    private void rolloverToNextSegment() throws IOException {
+        Log.e(TAG,"   motikanumaaa=====================================================");
+        Log.i(TAG, "[OnInfoListener] Max filesize approaching! Preparing next output file for seamless rollover.");
+        if (isVideoSplittingEnabled && videoSplitSizeBytes > 0 && !nextOutputFilePending) {
             nextSegmentTempFile = createNextSegmentOutputFile();
-
             if (SharedPreferencesManager.STORAGE_MODE_CUSTOM.equals(sharedPreferencesManager.getStorageMode())) {
-                if (nextSegmentPfd != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    mediaRecorder.setNextOutputFile(nextSegmentPfd.getFileDescriptor());
-                    nextOutputFilePending = true;
-                    Log.d(TAG, "setNextOutputFile() called successfully. nextOutputFilePending=" + nextOutputFilePending);
+                // SAF mode: nextSegmentPfd is set in createNextSegmentOutputFile
+                if (nextSegmentPfd != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        mediaRecorder.setNextOutputFile(nextSegmentPfd.getFileDescriptor());
+                        nextOutputFilePending = true;
+                        Log.d(TAG, "[OnInfoListener] setNextOutputFile (APPROACHING) called for SAF PFD.");
+                    }
                 } else {
-                    Log.e(TAG, "Ошибка SAF PFD. Остановка записи.");
-                    stopRecording();
+                    Log.e(TAG, "[OnInfoListener] Failed to open nextSegmentPfd for SAF. Stopping recording.");
+                    new Handler(Looper.getMainLooper()).post(() -> stopRecording());
                 }
             } else {
-                Log.d("" ,"nextSegmentTempFile exist = "+nextSegmentTempFile.exists());
-                if (nextSegmentTempFile != null && nextSegmentTempFile.exists() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    mediaRecorder.setNextOutputFile(nextSegmentTempFile);
-                    nextOutputFilePending = true;
-                    Log.d(TAG, "setNextOutputFile() called successfully. nextOutputFilePending=" + nextOutputFilePending);
+                // Internal storage mode
+                if (nextSegmentTempFile != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        mediaRecorder.setNextOutputFile(nextSegmentTempFile);
+                        nextOutputFilePending = true;
+                        Log.d(TAG, "[OnInfoListener] setNextOutputFile (APPROACHING) called for internal file.");
+                    }
                 } else {
-                    Log.e(TAG, "Ошибка файла сегмента. nextSegmentTempFile = " + nextSegmentTempFile);
-                    stopRecording();
+                    Log.e(TAG, "[OnInfoListener] Failed to create next segment file for rollover (APPROACHING). Stopping recording.");
+                    new Handler(Looper.getMainLooper()).post(() -> stopRecording());
                 }
             }
-
-        } catch (IllegalStateException e) {
-            Log.e(TAG, "setNextOutputFile вызван в неверном состоянии!", e);
-            stopRecording();
-        } catch (Exception e) {
-            Log.e(TAG, "Исключение при rolloverToNextSegment", e);
-            stopRecording();
         }
     }
+private void foo803(){
+    Log.e(TAG,"   +======803=====================================================");
 
+    Log.i(TAG, "[OnInfoListener] Next output file started. Advancing segment number and updating file tracking.");
+    // SAF: Close previous segment PFD
+    if (SharedPreferencesManager.STORAGE_MODE_CUSTOM.equals(sharedPreferencesManager.getStorageMode())) {
+        if (currentSegmentPfd != null) {
+            try { currentSegmentPfd.close(); } catch (Exception e) { Log.w(TAG, "Error closing previous segment PFD", e); }
+            currentSegmentPfd = nextSegmentPfd;
+            nextSegmentPfd = null;
+        }
+        // Queue the completed SAF segment for FFmpeg processing
+        if (currentRecordingDocFile != null && currentRecordingDocFile.exists() && currentRecordingDocFile.length() > 0) {
+            Log.d(TAG, "[OnInfoListener] Queuing completed SAF segment for FFmpeg: " + currentRecordingDocFile.getUri());
+            segmentProcessingQueue.add(currentRecordingDocFile);
+            processNextSegmentInQueue();
+        } else {
+            Log.w(TAG, "[OnInfoListener] Previous SAF segment missing or empty, skipping FFmpeg queue.");
+        }
+        // ----- Fix Start for this method(OnInfoListener_update_current_docfile_on_rollover) -----
+        // Update currentRecordingDocFile and currentRecordingSafUri to the new segment
+        currentRecordingDocFile = nextRecordingDocFile;
+        currentRecordingSafUri = (currentRecordingDocFile != null) ? currentRecordingDocFile.getUri() : null;
+        nextRecordingDocFile = null;
+        // ----- Fix Ended for this method(OnInfoListener_update_current_docfile_on_rollover) -----
+    } else {
+        // Internal storage mode
+        if (currentInternalTempFile != null && currentInternalTempFile.exists() && currentInternalTempFile.length() > 0) {
+            Log.i(TAG, "FFMPEG SEGMENT: Queuing completed segment for processing: " +
+                    currentInternalTempFile.getAbsolutePath() +
+                    " (Size: " + (currentInternalTempFile.length() / 1024 / 1024) + " MB)");
+            segmentProcessingQueue.add(currentInternalTempFile);
+            processNextSegmentInQueue();
+        } else {
+            Log.e(TAG, "FFMPEG ERROR: Previous segment file missing or empty, skipping FFmpeg queue.");
+        }
+    }
+    currentSegmentNumber++;
+    currentInternalTempFile = nextSegmentTempFile;
+    nextSegmentTempFile = null;
+    nextOutputFilePending = false; // Now it's safe to queue another next output file
+    Intent segmentIntent = new Intent(Constants.ACTION_RECORDING_SEGMENT_COMPLETE);
+    segmentIntent.putExtra(Constants.INTENT_EXTRA_FILE_URI, currentRecordingSafUri != null ? currentRecordingSafUri.toString() : (currentInternalTempFile != null ? Uri.fromFile(currentInternalTempFile).toString() : ""));
+    sendBroadcast(segmentIntent);
+    Log.d(TAG, "[OnInfoListener] Broadcasted segment complete for segment " + (currentSegmentNumber - 1));
+}
 
 
 
@@ -650,7 +690,6 @@ public class RecordingService extends Service {
             sharedPreferencesManager.setRecordingInProgress(false);
             stopSelf();
         }
-
     }
 
     /**
@@ -1260,7 +1299,7 @@ public class RecordingService extends Service {
                 if (message.length() > 1000) {
                     message = message.substring(0, 997) + "...";
                 }
-                Log.d(TAG, "[FFmpeg] " + message);
+               // Log.d(TAG, "[FFmpeg] " + message);
             }
         }, statistics -> {
             // Statistics handler - log periodically
@@ -1752,6 +1791,8 @@ public class RecordingService extends Service {
         if (isVideoSplittingEnabled && videoSplitSizeBytes > 0) {
             Log.d(TAG, "Setting MediaRecorder max file size to: " + videoSplitSizeBytes + " bytes for segment " + currentSegmentNumber);
             mediaRecorder.setMaxFileSize(videoSplitSizeBytes);
+           // mediaRecorder.setMaxDuration(10000);
+            Log.e(TAG,"max duration seteeddd");
         } else {
             mediaRecorder.setMaxFileSize(0);
             Log.d(TAG, "Video splitting not enabled or size invalid, setting max file size to 0 (no limit).");
@@ -2962,6 +3003,32 @@ public class RecordingService extends Service {
         return recordingState == RecordingState.PAUSED;
     }
 
+    public long getEstimatedFileSizeInBytes(int durationSeconds) {
+        if (durationSeconds <= 0) {
+            return 0;
+        }
+
+
+        long currentAudioBitrate = sharedPreferencesManager.getAudioBitrate();
+
+        android.util.Log.e("RecordingService", "Current Video Bitrate used: " + sharedPreferencesManager.sharedPreferences.getInt("bitrate_custom_value",16000*1000) + " bits/sec");
+        android.util.Log.e("RecordingService", "Current Audio Bitrate used: " + currentAudioBitrate + " bits/sec");
+
+        long totalBitrate = 16000000 + currentAudioBitrate;
+
+        if (totalBitrate <= 0) {
+            android.util.Log.e("RecordingService", "Cannot estimate file size: total bitrate is zero or not set.");
+            return 0;
+        }
+
+        long estimatedTotalBits = totalBitrate * durationSeconds;
+        long estimatedBytes = estimatedTotalBits / 8;
+
+        android.util.Log.d("RecordingService", "Estimated file size for " + durationSeconds + " seconds: " +
+                estimatedBytes + " bytes (" + (estimatedBytes / (1024.0 * 1024.0)) + " MB)");
+
+        return estimatedBytes;
+    }
     // Combined status check
     public boolean isWorkingInProgress() {
         // ----- Fix Start for this method(isWorkingInProgress)-----
@@ -2986,97 +3053,129 @@ public class RecordingService extends Service {
     // --- End Status Check ---
 
     // ----- Fix Start for this class (RecordingService_video_splitting_listener_and_rollover) -----
-    private final MediaRecorder.OnInfoListener mediaRecorderInfoListener = new MediaRecorder.OnInfoListener() {
-        @Override
-        public void onInfo(MediaRecorder mr, int what, int extra) {
-            Log.d(TAG, "[OnInfoListener] what=" + what + ", extra=" + extra);
-            try {
-                if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED) {
-                    Log.i(TAG, "[OnInfoListener] Max filesize reached! Attempting setNextOutputFile rollover.");
-                    if (isVideoSplittingEnabled && videoSplitSizeBytes > 0 && !nextOutputFilePending) {
-                        nextSegmentTempFile = createNextSegmentOutputFile();
-                        if (SharedPreferencesManager.STORAGE_MODE_CUSTOM.equals(sharedPreferencesManager.getStorageMode())) {
-                            if (nextSegmentPfd != null) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    mediaRecorder.setNextOutputFile(nextSegmentPfd.getFileDescriptor());
-                                    nextOutputFilePending = true;
-                                    Log.d(TAG, "[OnInfoListener] setNextOutputFile (REACHED) called for SAF PFD.");
-                                }
-                            } else {
-                                Log.e(TAG, "[OnInfoListener] Failed to open nextSegmentPfd for SAF. Stopping recording.");
-                                new Handler(Looper.getMainLooper()).post(() -> stopRecording());
-                            }
-                        } else {
-                            if (nextSegmentTempFile != null) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    mediaRecorder.setNextOutputFile(nextSegmentTempFile);
-                                    nextOutputFilePending = true;
-                                    Log.d(TAG, "[OnInfoListener] setNextOutputFile (REACHED) called for internal file.");
-                                }
-                            } else {
-                                Log.e(TAG, "[OnInfoListener] Failed to create next segment file for rollover (REACHED). Stopping recording.");
-                                new Handler(Looper.getMainLooper()).post(() -> stopRecording());
-                            }
-                        }
-                    } else if (!isVideoSplittingEnabled || videoSplitSizeBytes <= 0) {
-                        Log.w(TAG, "[OnInfoListener] Max filesize reached, but splitting not enabled/configured. Stopping recording.");
-                        new Handler(Looper.getMainLooper()).post(() -> stopRecording());
-                    }
-                }  if (what == 803 /* MEDIA_RECORDER_INFO_NEXT_OUTPUT_FILE_STARTED */) {
-                    Log.e(TAG,"------------------------MEDIA_RECORDER_INFO_NEXT_OUTPUT_FILE_STARTED ");
-                    Log.i(TAG, "Received MEDIA_RECORDER_INFO_NEXT_OUTPUT_FILE_STARTED");
-                    // SAF: Close previous segment PFD
+    private final MediaRecorder.OnInfoListener mediaRecorderInfoListener = new MediaRecorder.OnInfoListener(){
+    @Override
+    public void onInfo(MediaRecorder mr, int what, int extra) {
+        Log.d(TAG, "[OnInfoListener] what=" + what + ", extra=" + extra);
+        try {
+            if (what ==  MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_APPROACHING ) {
+                Log.e(TAG,"  default  motikanumaaa=====================================================");
+                Log.i(TAG, "[OnInfoListener] Max filesize approaching! Preparing next output file for seamless rollover.");
+                if (isVideoSplittingEnabled && videoSplitSizeBytes > 0 && !nextOutputFilePending) {
+                    nextSegmentTempFile = createNextSegmentOutputFile();
                     if (SharedPreferencesManager.STORAGE_MODE_CUSTOM.equals(sharedPreferencesManager.getStorageMode())) {
-                        if (currentSegmentPfd != null) {
-                            try {
-                                currentSegmentPfd.close();
-                            } catch (Exception e) {
-                                Log.w(TAG, "Error closing previous segment PFD", e);
+                        // SAF mode: nextSegmentPfd is set in createNextSegmentOutputFile
+                        if (nextSegmentPfd != null) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                mediaRecorder.setNextOutputFile(nextSegmentPfd.getFileDescriptor());
+                                nextOutputFilePending = true;
+                                Log.d(TAG, "[OnInfoListener] setNextOutputFile (APPROACHING) called for SAF PFD.");
                             }
-                            currentSegmentPfd = nextSegmentPfd;
-                            nextSegmentPfd = null;
-                        }
-                        // Queue the completed SAF segment for FFmpeg processing
-                        if (currentRecordingDocFile != null && currentRecordingDocFile.exists() && currentRecordingDocFile.length() > 0) {
-                            Log.d(TAG, "[OnInfoListener] Queuing completed SAF segment for FFmpeg: " + currentRecordingDocFile.getUri());
-                            segmentProcessingQueue.add(currentRecordingDocFile);
-                            processNextSegmentInQueue();
                         } else {
-                            Log.w(TAG, "[OnInfoListener] Previous SAF segment missing or empty, skipping FFmpeg queue.");
+                            Log.e(TAG, "[OnInfoListener] Failed to open nextSegmentPfd for SAF. Stopping recording.");
+                            new Handler(Looper.getMainLooper()).post(() -> stopRecording());
                         }
-                        // ----- Fix Start for this method(OnInfoListener_update_current_docfile_on_rollover) -----
-                        // Update currentRecordingDocFile and currentRecordingSafUri to the new segment
-                        currentRecordingDocFile = nextRecordingDocFile;
-                        currentRecordingSafUri = (currentRecordingDocFile != null) ? currentRecordingDocFile.getUri() : null;
-                        nextRecordingDocFile = null;
-                        // ----- Fix Ended for this method(OnInfoListener_update_current_docfile_on_rollover) -----
                     } else {
                         // Internal storage mode
-                        if (currentInternalTempFile != null && currentInternalTempFile.exists() && currentInternalTempFile.length() > 0) {
-                            Log.d(TAG, "[OnInfoListener] Queuing completed segment for FFmpeg: " + currentInternalTempFile.getAbsolutePath());
-                            segmentProcessingQueue.add(currentInternalTempFile);
-                            processNextSegmentInQueue();
+                        if (nextSegmentTempFile != null) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                mediaRecorder.setNextOutputFile(nextSegmentTempFile);
+                                nextOutputFilePending = true;
+                                Log.d(TAG, "[OnInfoListener] setNextOutputFile (APPROACHING) called for internal file.");
+                            }
                         } else {
-                            Log.w(TAG, "[OnInfoListener] Previous segment file missing or empty, skipping FFmpeg queue.");
+                            Log.e(TAG, "[OnInfoListener] Failed to create next segment file for rollover (APPROACHING). Stopping recording.");
+                            new Handler(Looper.getMainLooper()).post(() -> stopRecording());
                         }
                     }
-                    currentSegmentNumber++;
-                    currentInternalTempFile = nextSegmentTempFile;
-                    nextSegmentTempFile = null;
-                    nextOutputFilePending = false; // Now it's safe to queue another next output file
-                    Intent segmentIntent = new Intent(Constants.ACTION_RECORDING_SEGMENT_COMPLETE);
-                    segmentIntent.putExtra(Constants.INTENT_EXTRA_FILE_URI, currentRecordingSafUri != null ? currentRecordingSafUri.toString() : (currentInternalTempFile != null ? Uri.fromFile(currentInternalTempFile).toString() : ""));
-                    sendBroadcast(segmentIntent);
-                    Log.d(TAG, "[OnInfoListener] Broadcasted segment complete for segment " + (currentSegmentNumber - 1));
-                } else {
-                    Log.d(TAG, "[OnInfoListener] Unhandled info event: what=" + what);
                 }
-            } catch (Exception e) {
-                Log.e(TAG, "[OnInfoListener] Exception in OnInfoListener", e);
-                new Handler(Looper.getMainLooper()).post(() -> stopRecording());
+            } else if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED) {
+                Log.e(TAG,"   +======hasavvvv=====================================================");
+
+                Log.i(TAG, "[OnInfoListener] Max filesize reached! Attempting setNextOutputFile rollover.");
+                if (isVideoSplittingEnabled && videoSplitSizeBytes > 0 && !nextOutputFilePending) {
+                    nextSegmentTempFile = createNextSegmentOutputFile();
+                    if (SharedPreferencesManager.STORAGE_MODE_CUSTOM.equals(sharedPreferencesManager.getStorageMode())) {
+                        if (nextSegmentPfd != null) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                mediaRecorder.setNextOutputFile(nextSegmentPfd.getFileDescriptor());
+                                nextOutputFilePending = true;
+                                Log.d(TAG, "[OnInfoListener] setNextOutputFile (REACHED) called for SAF PFD.");
+                            }
+                        } else {
+                            Log.e(TAG, "[OnInfoListener] Failed to open nextSegmentPfd for SAF. Stopping recording.");
+                            new Handler(Looper.getMainLooper()).post(() -> stopRecording());
+                        }
+                    } else {
+                        if (nextSegmentTempFile != null) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                mediaRecorder.setNextOutputFile(nextSegmentTempFile);
+                                nextOutputFilePending = true;
+                                Log.d(TAG, "[OnInfoListener] setNextOutputFile (REACHED) called for internal file.");
+                            }
+                        } else {
+                            Log.e(TAG, "[OnInfoListener] Failed to create next segment file for rollover (REACHED). Stopping recording.");
+                            new Handler(Looper.getMainLooper()).post(() -> stopRecording());
+                        }
+                    }
+                } else if (!isVideoSplittingEnabled || videoSplitSizeBytes <= 0) {
+                    Log.w(TAG, "[OnInfoListener] Max filesize reached, but splitting not enabled/configured. Stopping recording.");
+                    new Handler(Looper.getMainLooper()).post(() -> stopRecording());
+                }
+            } else if (what == 803 /* MEDIA_RECORDER_INFO_NEXT_OUTPUT_FILE_STARTED */) {
+                Log.e(TAG,"   +======803=====================================================");
+
+                Log.i(TAG, "[OnInfoListener] Next output file started. Advancing segment number and updating file tracking.");
+                // SAF: Close previous segment PFD
+                if (SharedPreferencesManager.STORAGE_MODE_CUSTOM.equals(sharedPreferencesManager.getStorageMode())) {
+                    if (currentSegmentPfd != null) {
+                        try { currentSegmentPfd.close(); } catch (Exception e) { Log.w(TAG, "Error closing previous segment PFD", e); }
+                        currentSegmentPfd = nextSegmentPfd;
+                        nextSegmentPfd = null;
+                    }
+                    // Queue the completed SAF segment for FFmpeg processing
+                    if (currentRecordingDocFile != null && currentRecordingDocFile.exists() && currentRecordingDocFile.length() > 0) {
+                        Log.d(TAG, "[OnInfoListener] Queuing completed SAF segment for FFmpeg: " + currentRecordingDocFile.getUri());
+                        segmentProcessingQueue.add(currentRecordingDocFile);
+                        processNextSegmentInQueue();
+                    } else {
+                        Log.w(TAG, "[OnInfoListener] Previous SAF segment missing or empty, skipping FFmpeg queue.");
+                    }
+                    // ----- Fix Start for this method(OnInfoListener_update_current_docfile_on_rollover) -----
+                    // Update currentRecordingDocFile and currentRecordingSafUri to the new segment
+                    currentRecordingDocFile = nextRecordingDocFile;
+                    currentRecordingSafUri = (currentRecordingDocFile != null) ? currentRecordingDocFile.getUri() : null;
+                    nextRecordingDocFile = null;
+                    // ----- Fix Ended for this method(OnInfoListener_update_current_docfile_on_rollover) -----
+                } else {
+                    // Internal storage mode
+                    if (currentInternalTempFile != null && currentInternalTempFile.exists() && currentInternalTempFile.length() > 0) {
+                        Log.i(TAG, "FFMPEG SEGMENT: Queuing completed segment for processing: " +
+                                currentInternalTempFile.getAbsolutePath() +
+                                " (Size: " + (currentInternalTempFile.length() / 1024 / 1024) + " MB)");
+                        segmentProcessingQueue.add(currentInternalTempFile);
+                        processNextSegmentInQueue();
+                    } else {
+                        Log.e(TAG, "FFMPEG ERROR: Previous segment file missing or empty, skipping FFmpeg queue.");
+                    }
+                }
+                currentSegmentNumber++;
+                currentInternalTempFile = nextSegmentTempFile;
+                nextSegmentTempFile = null;
+                nextOutputFilePending = false; // Now it's safe to queue another next output file
+                Intent segmentIntent = new Intent(Constants.ACTION_RECORDING_SEGMENT_COMPLETE);
+                segmentIntent.putExtra(Constants.INTENT_EXTRA_FILE_URI, currentRecordingSafUri != null ? currentRecordingSafUri.toString() : (currentInternalTempFile != null ? Uri.fromFile(currentInternalTempFile).toString() : ""));
+                sendBroadcast(segmentIntent);
+                Log.d(TAG, "[OnInfoListener] Broadcasted segment complete for segment " + (currentSegmentNumber - 1));
+            } else {
+                Log.d(TAG, "[OnInfoListener] Unhandled info event: what=" + what);
             }
+        } catch (Exception e) {
+            Log.e(TAG, "[OnInfoListener] Exception in OnInfoListener", e);
+            new Handler(Looper.getMainLooper()).post(() -> stopRecording());
         }
-    };
+    }
+};
 
     private void handleSegmentRolloverInternal() {
         Log.i(TAG, "handleSegmentRolloverInternal: NO-OP with setNextOutputFile. All rollover handled in OnInfoListener.");
